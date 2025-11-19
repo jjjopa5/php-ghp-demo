@@ -128,9 +128,13 @@ jobs:
           HISTORY_DIR="report-history"
           mkdir -p "${HISTORY_DIR}"
 
-          # Подмешиваем старую историю, если она есть
+          # Подмешиваем старую историю:
+          # 1) если уже есть новый формат (gh-pages/report-history) – тянем его
+          # 2) если его нет, но есть старый формат (ветки лежат в корне gh-pages) – тянем всё из корня
           if [ -d gh-pages/"${HISTORY_DIR}" ]; then
             rsync -a gh-pages/"${HISTORY_DIR}"/ "${HISTORY_DIR}/"
+          elif [ -d gh-pages ]; then
+            rsync -a --exclude '.git' gh-pages/ "${HISTORY_DIR}/"
           fi
 
           BRANCH="${GITHUB_REF_NAME}"
