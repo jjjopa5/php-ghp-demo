@@ -3,13 +3,12 @@ name: CI + Reports to GitHub Pages
 on:
   push:
     branches:
-      - main
-      - master
+      - '**'            # запуск из любых веток
   pull_request:
   workflow_dispatch:
 
 permissions:
-  contents: write   # нужно для пуша в gh-pages
+  contents: write       # нужно для пуша в gh-pages
   pages: read
   id-token: write
 
@@ -26,7 +25,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.3'
-          coverage: xdebug   # нужно для coverage-html :contentReference[oaicite:4]{index=4}
+          coverage: xdebug   # для coverage-html
 
       - name: Cache composer dependencies
         uses: actions/cache@v4
@@ -54,41 +53,43 @@ jobs:
             --report=full \
             --report-file=build/phpcs/report.txt \
             src tests
-        # форматы репортов см. в документации PHPCS :contentReference[oaicite:5]{index=5}
 
       - name: Prepare simple HTML wrapper for PHPCS
+        env:
+          BRANCH: ${{ github.ref_name }}
+          COMMIT: ${{ github.sha }}
+          RUN_NO: ${{ github.run_number }}
         run: |
-          cat > build/phpcs/index.html <<'HTML'
+          cat > build/phpcs/index.html <<HTML
           <!doctype html>
           <html lang="en">
           <head>
             <meta charset="utf-8" />
             <title>PHP_CodeSniffer report</title>
             <style>
-              body { font-family: system-ui, sans-serif; margin: 2rem; white-space: pre-wrap; }
+              body { font-family: system-ui, sans-serif; margin: 2rem; background: #f3f4f6; }
               h1 { margin-bottom: 1rem; }
-              .meta { color: #666; font-size: 0.9rem; margin-bottom: 1rem; }
-              .content { font-family: monospace; font-size: 0.9rem; background: #f5f5f5; padding: 1rem; border-radius: 4px; }
+              .meta { color: #4b5563; font-size: 0.9rem; margin-bottom: 1rem; }
+              .content { font-family: monospace; font-size: 0.9rem; background: #f9fafb; padding: 1rem; border-radius: 4px; white-space: pre-wrap; }
             </style>
           </head>
           <body>
             <h1>PHP_CodeSniffer report</h1>
             <div class="meta">
-              Branch: ${{ github.ref_name }}<br/>
-              Commit: ${{ github.sha }}<br/>
-              Run: ${{ github.run_number }}
+              Branch: $BRANCH<br/>
+              Commit: $COMMIT<br/>
+              Run: $RUN_NO
             </div>
             <div class="content">
           HTML
 
           cat build/phpcs/report.txt >> build/phpcs/index.html
 
-          cat >> build/phpcs/index.html <<'HTML'
+          cat >> build/phpcs/index.html <<HTML
             </div>
           </body>
           </html>
           HTML
-
 
       - name: Archive reports for next job
         uses: actions/upload-artifact@v4
@@ -101,7 +102,8 @@ jobs:
     name: Publish reports to GitHub Pages
     needs: tests
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    # публикуем отчёт для любого push`а в ветку (PR не трогаем)
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
 
     steps:
       - name: Download reports artifact
@@ -123,11 +125,10 @@ jobs:
         run: |
           set -e
 
-          # каталог, куда будем складывать всю историю
           HISTORY_DIR="report-history"
           mkdir -p "${HISTORY_DIR}"
 
-          # если из gh-pages что-то пришло — переносим историю
+          # Подмешиваем старую историю, если она есть
           if [ -d gh-pages/"${HISTORY_DIR}" ]; then
             rsync -a gh-pages/"${HISTORY_DIR}"/ "${HISTORY_DIR}/"
           fi
@@ -139,34 +140,69 @@ jobs:
           RUN_DIR="${HISTORY_DIR}/${BRANCH}/${RUN_ID}-${SHORT_SHA}"
           mkdir -p "${RUN_DIR}"
 
-          # phpunit coverage (HTML)
+          # Кладём отчёт phpunit coverage (HTML), если есть
           if [ -d build/coverage-html ]; then
             mkdir -p "${RUN_DIR}/coverage-html"
             rsync -a build/coverage-html/ "${RUN_DIR}/coverage-html/"
           fi
 
-          # phpcs report (HTML-обёртка)
+          # Кладём отчёт PHPCS (HTML-обёртка), если есть
           if [ -d build/phpcs ]; then
             mkdir -p "${RUN_DIR}/phpcs"
             rsync -a build/phpcs/ "${RUN_DIR}/phpcs/"
           fi
 
-          # index для конкретного прогона
+          # Страница конкретного прогона
           cat > "${RUN_DIR}/index.html" <<EOF
           <!doctype html>
           <html lang="en">
           <head>
             <meta charset="utf-8" />
-            <title>Reports for ${BRANCH} – ${RUN_ID}/${SHORT_SHA}</title>
+            <title>Reports for ${BRANCH} – run ${RUN_ID}/${SHORT_SHA}</title>
+            <style>
+              body{font-family:system-ui,sans-serif;margin:2rem;background:#f3f4f6;}
+              .container{max-width:960px;margin:0 auto;}
+              h1{margin-bottom:1rem;}
+              .card{background:#fff;border-radius:8px;padding:1rem 1.5rem;
+                    box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:1rem;}
+              a{text-decoration:none;color:#2563eb;}
+              .meta{font-size:.9rem;color:#4b5563;margin-bottom:.75rem;}
+            </style>
           </head>
           <body>
-            <h1>Reports for branch ${BRANCH}</h1>
-            <p>Run: ${RUN_ID}, commit: ${SHORT_SHA}</p>
-            <ul>
-              <li><a href="coverage-html/index.html">PHPUnit coverage HTML</a></li>
-              <li><a href="phpcs/index.html">PHP_CodeSniffer report</a></li>
-            </ul>
-            <p><a href="../../index.html">Back to branch index</a></p>
+            <div class="container">
+              <h1>Run ${RUN_ID} / ${SHORT_SHA}</h1>
+              <div class="meta">
+                Branch: ${BRANCH}<br/>
+                Commit: ${SHORT_SHA}
+              </div>
+              <div class="card">
+                <h2>Reports</h2>
+                <ul>
+                  <li><a href="coverage-html/index.html">PHPUnit coverage HTML</a></li>
+                  <li><a href="phpcs/index.html">PHP_CodeSniffer report</a></li>
+                </ul>
+              </div>
+              <p><a href="../index.html">&larr; Back to branch history</a></p>
+            </div>
+          </body>
+          </html>
+          EOF
+
+          # Алиас latest для ветки — редирект на последний прогон
+          LATEST_DIR="${HISTORY_DIR}/${BRANCH}/latest"
+          mkdir -p "${LATEST_DIR}"
+          cat > "${LATEST_DIR}/index.html" <<EOF
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8" />
+            <meta http-equiv="refresh" content="0; url=../${RUN_ID}-${SHORT_SHA}/index.html" />
+            <title>Latest report for ${BRANCH}</title>
+          </head>
+          <body>
+            <p>Redirecting to latest report for branch <strong>${BRANCH}</strong>...</p>
+            <p>If you are not redirected, <a href="../${RUN_ID}-${SHORT_SHA}/index.html">click here</a>.</p>
           </body>
           </html>
           EOF
@@ -176,36 +212,90 @@ jobs:
           {
             echo '<!doctype html>'
             echo '<html lang="en">'
-            echo '<head><meta charset="utf-8" /><title>Reports for branch '"${BRANCH}"'</title></head>'
-            echo '<body>'
-            echo '<h1>Reports for branch '"${BRANCH}"'</h1>'
-            echo '<ul>'
+            echo '<head>'
+            echo '  <meta charset="utf-8" />'
+            echo '  <title>Reports for branch '"${BRANCH}"'</title>'
+            echo '  <style>'
+            echo '    body{font-family:system-ui,sans-serif;margin:2rem;background:#f3f4f6;}'
+            echo '    .container{max-width:960px;margin:0 auto;}'
+            echo '    h1{margin-bottom:1rem;}'
+            echo '    .card{background:#fff;border-radius:8px;padding:1rem 1.5rem;box-shadow:0 1px 3px rgba(0,0,0,.1);margin-bottom:1rem;}'
+            echo '    ul{list-style:none;padding:0;}'
+            echo '    li+li{margin-top:.5rem;}'
+            echo '    a{text-decoration:none;color:#2563eb;}'
+            echo '    .tag{font-size:.75rem;background:#e5e7eb;border-radius:999px;padding:0.1rem 0.5rem;margin-left:.5rem;}'
+            echo '  </style>'
+            echo '</head>'
+            echo '<body><div class="container">'
+            echo '<h1>Branch: '"${BRANCH}"'</h1>'
+
+            echo '<div class="card">'
+            echo '  <h2>Latest report</h2>'
+            echo '  <p><a href="latest/index.html">Open latest</a></p>'
+            echo '</div>'
+
+            echo '<div class="card">'
+            echo '  <h2>All runs</h2>'
+            echo '  <ul>'
+            first=""
             for d in $(ls -1 "${HISTORY_DIR}/${BRANCH}" | sort -r); do
-              if [ -d "${HISTORY_DIR}/${BRANCH}/${d}" ]; then
-                echo '<li><a href="'"${d}"'/index.html">'"${d}"'</a></li>'
+              if [ -d "${HISTORY_DIR}/${BRANCH}/${d}" ] && [ "${d}" != "latest" ]; then
+                if [ -z "$first" ]; then
+                  echo '    <li><a href="'"${d}"'/index.html">'"${d}"'</a><span class="tag">latest</span></li>'
+                  first="$d"
+                else
+                  echo '    <li><a href="'"${d}"'/index.html">'"${d}"'</a></li>'
+                fi
               fi
             done
-            echo '</ul>'
-            echo '<p><a href="../index.html">Back to all branches</a></p>'
-            echo '</body></html>'
+            echo '  </ul>'
+            echo '</div>'
+
+            echo '<p><a href="../index.html">&larr; Back to all branches</a></p>'
+            echo '</div></body></html>'
           } > "${BRANCH_INDEX}"
 
-          # корневой index со списком веток
+          # Корневой индекс – дашборд по веткам
           ROOT_INDEX="${HISTORY_DIR}/index.html"
           {
             echo '<!doctype html>'
             echo '<html lang="en">'
-            echo '<head><meta charset="utf-8" /><title>Test reports</title></head>'
-            echo '<body>'
-            echo '<h1>Test reports</h1>'
-            echo '<ul>'
+            echo '<head>'
+            echo '  <meta charset="utf-8" />'
+            echo '  <title>PHP Quality Dashboard</title>'
+            echo '  <style>'
+            echo '    body{font-family:system-ui,sans-serif;margin:2rem;background:#f9fafb;}'
+            echo '    .container{max-width:960px;margin:0 auto;}'
+            echo '    h1{margin-bottom:1rem;}'
+            echo '    .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem;}'
+            echo '    .card{background:#fff;border-radius:8px;padding:1rem 1.25rem;box-shadow:0 1px 3px rgba(0,0,0,.1);}'
+            echo '    a{text-decoration:none;color:#2563eb;}'
+            echo '    .branch{font-weight:600;margin-bottom:.25rem;}'
+            echo '    .meta{font-size:.85rem;color:#4b5563;}'
+            echo '  </style>'
+            echo '</head>'
+            echo '<body><div class="container">'
+            echo '<h1>PHP Quality Dashboard</h1>'
+            echo '<div class="grid">'
             for b in $(ls -1 "${HISTORY_DIR}"); do
               if [ -d "${HISTORY_DIR}/${b}" ]; then
-                echo '<li><a href="'"${b}"'/index.html">'"${b}"'</a></li>'
+                latest_run=""
+                for d in $(ls -1 "${HISTORY_DIR}/${b}" | sort -r); do
+                  if [ -d "${HISTORY_DIR}/${b}/${d}" ] && [ "${d}" != "latest" ]; then
+                    latest_run="$d"
+                    break
+                  fi
+                done
+                echo '<div class="card">'
+                echo '  <div class="branch">'"${b}"'</div>'
+                echo '  <p class="meta"><a href="'"${b}"'/index.html">Branch history</a></p>'
+                if [ -n "$latest_run" ]; then
+                  echo '  <p class="meta"><a href="'"${b}"'/latest/index.html">Latest: '"${latest_run}"'</a></p>'
+                fi
+                echo '</div>'
               fi
             done
-            echo '</ul>'
-            echo '</body></html>'
+            echo '</div></div></body></html>'
           } > "${ROOT_INDEX}"
 
       - name: Deploy to gh-pages
