@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<ruleset name="Demo Coding Standard">
+    <description>Basic coding standard for demo project</description>
+
+    <file>src</file>
+    <file>tests</file>
+
+    <!-- Можно заменить на PSR2/PSR12/Drupal/etc -->
+    <rule ref="PSR12"/>
+
+    <arg name="basepath" value="."/>
+</ruleset>
