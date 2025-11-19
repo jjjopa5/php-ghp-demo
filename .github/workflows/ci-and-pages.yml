@@ -242,8 +242,8 @@ jobs:
             echo '  <h2>All runs</h2>'
             echo '  <ul>'
             first=""
-            for d in $(ls -1 "${HISTORY_DIR}/${BRANCH}" | sort -r); do
-              if [ -d "${HISTORY_DIR}/${BRANCH}/${d}" ] && [ "${d}" != "latest" ]; then
+            for d in $(ls -1 "${HISTORY_DIR}/${BRANCH}" | grep -v '^latest$' | sort -t- -k1,1nr); do
+              if [ -d "${HISTORY_DIR}/${BRANCH}/${d}" ]; then
                 if [ -z "$first" ]; then
                   echo '    <li><a href="'"${d}"'/index.html">'"${d}"'</a><span class="tag">latest</span></li>'
                   first="$d"
@@ -284,8 +284,8 @@ jobs:
             for b in $(ls -1 "${HISTORY_DIR}"); do
               if [ -d "${HISTORY_DIR}/${b}" ]; then
                 latest_run=""
-                for d in $(ls -1 "${HISTORY_DIR}/${b}" | sort -r); do
-                  if [ -d "${HISTORY_DIR}/${b}/${d}" ] && [ "${d}" != "latest" ]; then
+                for d in $(ls -1 "${HISTORY_DIR}/${b}" | grep -v '^latest$' | sort -t- -k1,1nr); do
+                  if [ -d "${HISTORY_DIR}/${b}/${d}" ]; then
                     latest_run="$d"
                     break
                   fi
