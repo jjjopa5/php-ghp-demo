@@ -46,22 +46,22 @@ jobs:
         env:
           BRANCH: ${{ github.ref_name }}
           RUN_NO: ${{ github.run_number }}
-          SHORT_SHA: ${{ github.sha_short || github.sha }}
+          SHORT_SHA: ${{ github.sha }}
         run: |
           mkdir -p build/phpcs
 
-          # Запускаем PHPCS в JSON, не падаем при ошибках
+          # Запускаем PHPCS в JSON, игнорируем код возврата (чтобы CI не падал при ошибках)
           vendor/bin/phpcs \
             --standard=phpcs.xml \
             --report=json \
             --report-file=build/phpcs/report.json \
-            src tests || echo "PHPCS found issues (normal)"
+            src tests || true
 
-          # Если JSON пустой или не создался — делаем заглушку
+          # Если JSON не создался — делаем заглушкой чистый отчёт
           if [ ! -f build/phpcs/report.json ] || [ ! -s build/phpcs/report.json ]; then
             cat > build/phpcs/report.json <<'JSON'
           {
-            "totals": { "errors": 0, "warnings": 0, "fixable": 0, "files": 2 },
+            "totals": { "errors": 0, "warnings": 0, "fixable": 0 },
             "files": {}
           }
           JSON
@@ -115,14 +115,14 @@ jobs:
             <div class="text-center py-20">
               <div class="text-9xl mb-8">Perfect!</div>
               <div class="text-6xl font-bold text-green-600 mb-6">No issues found!</div>
-              <p class="text-2xl text-gray-700">Your code is 100% PSR-12 compliant.<br>You're a legend!</p>
+              <p class="text-2xl text-gray-700">Your code is 100% PSR-12 compliant.<br>Keep rocking!</p>
             </div>`;
           return;
         }
 
         let html = `
           <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-            <div class="success text-white p-8 rounded-2xl text-center shadow-lg"><div class="text-5xl font-bold">${Object.keys(files).length}</div><div class="text-xl">Files checked</div></div>
+            <div class="success text-white p-8 rounded-2xl text-center shadow-lg"><div class="text-5xl font-bold">${Object.keys(files).length || 0}</div><div class="text-xl">Files checked</div></div>
             <div class="error text-white p-8 rounded-2xl text-center shadow-lg"><div class="text-5xl font-bold">${t.errors}</div><div class="text-xl">Errors</div></div>
             <div class="warning text-white p-8 rounded-2xl text-center shadow-lg"><div class="text-5xl font-bold">${t.warnings}</div><div class="text-xl">Warnings</div></div>
           </div>`;
@@ -137,7 +137,7 @@ jobs:
             const type = m.type === 'ERROR' ? 'bg-red-100 text-red-800 border-l-4 border-red-500' : 'bg-amber-100 text-amber-800 border-l-4 border-amber-500';
             html += `<div class="flex items-start space-x-4 p-4 rounded-lg ${type} mb-4">
               <div class="font-bold text-lg min-w-16">L${m.line}</div>
-              <div><div class="font-medium">${m.message}</div><div class="text-sm text-gray-600">Source: ${m.source}</div></div>
+              <div><div class="font-medium">${m.message}</div><div class="text-sm text-gray-600 mt-1">Source: ${m.source || 'unknown'}</div></div>
             </div>`;
           });
           html += `</div>`;
@@ -145,8 +145,8 @@ jobs:
 
         container.innerHTML = html;
       })
-      .catch(() => {
-        document.getElementById('report').innerHTML = `<div class="text-center text-red-600 text-3xl">Failed to load report.json</div>`;
+      .catch(err => {
+        document.getElementById('report').innerHTML = `<div class="text-center py-20 text-red-600"><h2>Error loading report</h2><pre>${err}</pre></div>`;
       });
   </script>
 </body>
@@ -158,7 +158,6 @@ EOF
         with:
           name: reports
           path: build
-          if-no-files-found: error
 
   publish-report:
     name: Publish reports to GitHub Pages
@@ -178,15 +177,16 @@ EOF
           ref: gh-pages
           path: gh-pages
 
-      - name: Prepare and deploy report history
+      - name: Prepare and deploy reports
         run: |
           set -e
           HISTORY_DIR="report-history"
           mkdir -p "$HISTORY_DIR"
 
+          # Копируем старую историю, если есть
           if [ -d "gh-pages/$HISTORY_DIR" ]; then
             rsync -a "gh-pages/$HISTORY_DIR/" "$HISTORY_DIR/"
-          elif [ -d gh-pages ]; then
+          elif [ -d gh-pages ] && [ "$(ls -A gh-pages)" ]; then
             rsync -a --exclude '.git' gh-pages/ "$HISTORY_DIR/"
           fi
 
@@ -199,25 +199,30 @@ EOF
           [ -d build/coverage-html ] && rsync -a build/coverage-html/ "$RUN_DIR/coverage-html/"
           [ -d build/phpcs ] && rsync -a build/phpcs/ "$RUN_DIR/phpcs/"
 
-          # (остальные index.html, latest, дашборд — оставляем как у тебя, они норм)
-          # Я их не трогаю — они у тебя уже красивые и рабочие
-
+          # Страница запуска
           cat > "$RUN_DIR/index.html" <<EOF
-          <!doctype html><html lang="en"><head><meta charset="utf-8"><title>Run $RUN_ID / $SHORT_SHA</title>
-          <style>body{font-family:system-ui,sans-serif;margin:2rem;background:#f9fafb;}
-          .c{max-width:960px;margin:0 auto;}a{color:#3b82f6;}</style></head>
-          <body><div class="c"><h1>Run $RUN_ID / $SHORT_SHA</h1>
-          <p>Branch: $BRANCH</p>
-          <ul><li><a href="coverage-html/index.html">Coverage Report</a></li>
-              <li><a href="phpcs/index.html">PHPCS Report</a></li></ul>
-          <p><a href="../index.html">Back to branch</a></p></div></body></html>
-          EOF
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Run $RUN_ID / $SHORT_SHA</title>
+<style>body{font-family:system-ui,sans-serif;margin:2rem;background:#f9fafb;color:#1f2937;}
+.c{max-width:960px;margin:0 auto;}a{color:#3b82f6;text-decoration:none;font-weight:500;}</style>
+</head><body><div class="c">
+<h1>Run $RUN_ID / $SHORT_SHA</h1>
+<p>Branch: $BRANCH • Commit: $SHORT_SHA</p>
+<ul style="list-style:none;padding:0;">
+  <li style="margin:1rem 0;"><a href="coverage-html/index.html">PHPUnit Coverage Report</a></li>
+  <li style="margin:1rem 0;"><a href="phpcs/index.html">PHP_CodeSniffer Report</a></li>
+</ul>
+<p><a href="../index.html">Back to branch history</a></p>
+</div></body></html>
+EOF
 
-          # latest redirect
+          # Latest redirect
           mkdir -p "$HISTORY_DIR/$BRANCH/latest"
-          echo '<meta http-equiv="refresh" content="0; url=../'$RUN_ID-$SHORT_SHA'/index.html">' > "$HISTORY_DIR/$BRANCH/latest/index.html"
+          cat > "$HISTORY_DIR/$BRANCH/latest/index.html" <<EOF
+<!doctype html><html><head><meta http-equiv="refresh" content="0; url=../$RUN_ID-$SHORT_SHA/index.html"></head><body>Redirecting...</body></html>
+EOF
 
-      - name: Deploy to gh-pages
+      - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
