@@ -44,7 +44,7 @@ jobs:
             --report=full \
             --report-file=build/phpcs/report.txt \
             src tests
-            - name: Prepare beautiful PHPCS report
+      - name: Prepare beautiful PHPCS report
         env:
           BRANCH: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
