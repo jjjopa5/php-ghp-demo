@@ -49,119 +49,115 @@ jobs:
         run: |
           mkdir -p build/phpcs
 
-          # Запускаем PHPCS в JSON, не падаем при ошибках
           vendor/bin/phpcs \
             --standard=phpcs.xml \
             --report=json \
             --report-file=build/phpcs/report.json \
             src tests || true
 
-          # Если JSON пустой — делаем чистый отчёт
-          if [ ! -f build/phpcs/report.json ] || [ ! -s build/phpcs/report.json ]; then
-            cat > build/phpcs/report.json <<'JSON'
+          # Если JSON пустой — создаём чистый отчёт
+          [ -s build/phpcs/report.json ] || cat > build/phpcs/report.json <<-JSON
           {
             "totals": { "errors": 0, "warnings": 0, "fixable": 0 },
             "files": {}
           }
           JSON
-          fi
 
-          # Красивый HTML с Tailwind
-          cat > build/phpcs/index.html <<'HTML'
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>PHP_CodeSniffer Report</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    .success { background: linear-gradient(90deg, #10b981, #059669); }
-    .error   { background: linear-gradient(90deg, #ef4444, #dc2626); }
-    .warning { background: linear-gradient(90deg, #f59e0b, #d97706); }
-  </style>
-</head>
-<body class="bg-gray-50 text-gray-900 min-h-screen">
-  <div class="max-w-5xl mx-auto p-8">
-    <h1 class="text-5xl font-extrabold text-center mb-12 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-      PHP_CodeSniffer Report
-    </h1>
+          # ←←←←←←←←←←←←←←←← ВОТ ТАК ПИШЕМ HTML — НИКАКИХ ОШИБОК!
+          cat > build/phpcs/index.html <<-'HTML'
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <title>PHP_CodeSniffer Report</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <script src="https://cdn.tailwindcss.com"></script>
+            <style>
+              .success { background: linear-gradient(90deg, #10b981, #059669); }
+              .error   { background: linear-gradient(90deg, #ef4444, #dc2626); }
+              .warning { background: linear-gradient(90deg, #f59e0b, #d97706); }
+            </style>
+          </head>
+          <body class="bg-gray-50 text-gray-900 min-h-screen">
+            <div class="max-w-5xl mx-auto p-8">
+              <h1 class="text-5xl font-extrabold text-center mb-12 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                PHP_CodeSniffer Report
+              </h1>
 
-    <div class="bg-white rounded-2xl shadow-xl p-8 mb-10 text-center">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-        <div><div class="text-sm text-gray-500 uppercase tracking-wider">Branch</div><div class="text-2xl font-bold">${BRANCH}</div></div>
-        <div><div class="text-sm text-gray-500 uppercase tracking-wider">Commit</div><div class="text-2xl font-mono">${SHORT_SHA:0:7}</div></div>
-        <div><div class="text-sm text-gray-500 uppercase tracking-wider">Run #</div><div class="text-2xl font-bold">${RUN_NO}</div></div>
-      </div>
-    </div>
-
-    <div id="report" class="space-y-8">
-      <div class="text-center py-32"><div class="text-9xl animate-pulse">Loading...</div></div>
-    </div>
-  </div>
-
-  <script>
-    fetch('report.json')
-      .then(r => r.json())
-      .then(data => {
-        const t = data.totals || { errors: 0, warnings: 0 };
-        const files = data.files || {};
-        const el = document.getElementById('report');
-        el.innerHTML = '';
-
-        if (t.errors === 0 && t.warnings === 0) {
-          el.innerHTML = `
-            <div class="text-center py-20">
-              <div class="text-9xl mb-8">Perfect!</div>
-              <div class="text-6xl font-bold text-green-600 mb-6">No issues found!</div>
-              <p class="text-2xl text-gray-700">Your code is 100% PSR-12 compliant.<br>You're a legend!</p>
-            </div>`;
-          return;
-        }
-
-        let html = `
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
-            <div class="success text-white p-10 rounded-2xl text-center shadow-2xl">
-              <div class="text-6xl font-bold">${Object.keys(files).length || 0}</div>
-              <div class="text-2xl">Files checked</div>
-            </div>
-            <div class="error text-white p-10 rounded-2xl text-center shadow-2xl">
-              <div class="text-6xl font-bold">${t.errors}</div>
-              <div class="text-2xl">Errors</div>
-            </div>
-            <div class="warning text-white p-10 rounded-2xl text-center shadow-2xl">
-              <div class="text-6xl font-bold">${t.warnings}</div>
-              <div class="text-2xl">Warnings</div>
-            </div>
-          </div>`;
-
-        Object.keys(files).forEach(file => {
-          const f = files[file];
-          if (f.errors === 0 && f.warnings === 0) return;
-          const clean = file.replace(/^\/home\/runner\/work\/[^\/]+\/[^\/]+\//, '');
-          html += `<div class="bg-white rounded-2xl shadow-xl p-8">
-            <h3 class="font-mono text-xl font-bold text-gray-800 mb-6">${clean}</h3>`;
-          f.messages.forEach(m => {
-            const type = m.type === 'ERROR' ? 'bg-red-100 text-red-800 border-l-8 border-red-500' : 'bg-amber-100 text-amber-800 border-l-8 border-amber-500';
-            html += `<div class="flex gap-6 p-5 rounded-lg ${type} mb-4">
-              <div class="font-bold text-lg w-16">L${m.line}</div>
-              <div>
-                <div class="font-medium">${m.message}</div>
-                <div class="text-sm text-gray-600 mt-1">${m.source || ''}</div>
+              <div class="bg-white rounded-2xl shadow-xl p-8 mb-10 text-center">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div><div class="text-sm text-gray-500 uppercase tracking-wider">Branch</div><div class="text-2xl font-bold">${BRANCH}</div></div>
+                  <div><div class="text-sm text-gray-500 uppercase tracking-wider">Commit</div><div class="text-2xl font-mono">${SHORT_SHA:0:7}</div></div>
+                  <div><div class="text-sm text-gray-500 uppercase tracking-wider">Run #</div><div class="text-2xl font-bold">${RUN_NO}</div></div>
+                </div>
               </div>
-            </div>`;
-          });
-          html += `</div>`;
-        });
 
-        el.innerHTML = html;
-      })
-      .catch(() => el.innerHTML = '<div class="text-center text-red-600 text-4xl">Failed to load report.json</div>');
-  </script>
-</body>
-</html>
-HTML
+              <div id="report" class="space-y-8">
+                <div class="text-center py-32"><div class="text-9xl animate-pulse">Loading...</div></div>
+              </div>
+            </div>
 
+            <script>
+              fetch('report.json')
+                .then(r => r.json())
+                .then(data => {
+                  const t = data.totals || { errors: 0, warnings: 0 };
+                  const files = data.files || {};
+                  const el = document.getElementById('report');
+                  el.innerHTML = '';
+
+                  if (t.errors === 0 && t.warnings === 0) {
+                    el.innerHTML = `
+                      <div class="text-center py-20">
+                        <div class="text-9xl mb-8">Perfect!</div>
+                        <div class="text-6xl font-bold text-green-600 mb-6">No issues found!</div>
+                        <p class="text-2xl text-gray-700">Your code is 100% PSR-12 compliant.<br>Keep it up!</p>
+                      </div>`;
+                    return;
+                  }
+
+                  let html = `
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+                      <div class="success text-white p-10 rounded-2xl text-center shadow-2xl">
+                        <div class="text-6xl font-bold">${Object.keys(files).length || 0}</div>
+                        <div class="text-2xl">Files checked</div>
+                      </div>
+                      <div class="error text-white p-10 rounded-2xl text-center shadow-2xl">
+                        <div class="text-6xl font-bold">${t.errors}</div>
+                        <div class="text-2xl">Errors</div>
+                      </div>
+                      <div class="warning text-white p-10 rounded-2xl text-center shadow-2xl">
+                        <div class="text-6xl font-bold">${t.warnings}</div>
+                        <div class="text-2xl">Warnings</div>
+                      </div>
+                    </div>`;
+
+                  Object.keys(files).forEach(file => {
+                    const f = files[file];
+                    if (f.errors === 0 && f.warnings === 0) return;
+                    const clean = file.replace(/^\/home\/runner\/work\/[^\/]+\/[^\/]+\//, '');
+                    html += `<div class="bg-white rounded-2xl shadow-xl p-8 mb-8">
+                      <h3 class="font-mono text-xl font-bold text-gray-800 mb-6">${clean}</h3>`;
+                    f.messages.forEach(m => {
+                      const type = m.type === 'ERROR' ? 'bg-red-100 text-red-800 border-l-8 border-red-500' : 'bg-amber-100 text-amber-800 border-l-8 border-amber-500';
+                      html += `<div class="flex gap-6 p-5 rounded-lg ${type} mb-4">
+                        <div class="font-bold text-lg w-16">L${m.line}</div>
+                        <div>
+                          <div class="font-medium">${m.message}</div>
+                          <div class="text-sm text-gray-600 mt-1">${m.source || ''}</div>
+                        </div>
+                      </div>`;
+                    });
+                    html += `</div>`;
+                  });
+
+                  el.innerHTML = html;
+                })
+                .catch(() => el.innerHTML = '<div class="text-center text-red-600 text-4xl">Failed to load report.json</div>');
+            </script>
+          </body>
+          </html>
+          HTML
       - name: Upload reports artifact
         uses: actions/upload-artifact@v4
         with:
