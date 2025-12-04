@@ -13,7 +13,6 @@ permissions:
 
 jobs:
   tests:
-    name: Run tests and static analysis
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -25,7 +24,7 @@ jobs:
           php-version: '8.3'
           coverage: xdebug
 
-      - name: Cache composer dependencies
+      - name: Cache Composer dependencies
         uses: actions/cache@v4
         with:
           path: |
@@ -37,12 +36,12 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist
 
-      - name: Run phpunit with coverage
+      - name: Run PHPUnit + coverage
         run: |
           mkdir -p build/coverage-html
           vendor/bin/phpunit --configuration=phpunit.xml --coverage-html build/coverage-html
 
-      - name: Run PHPCS + generate beautiful HTML report
+      - name: Run PHPCS + beautiful report
         env:
           BRANCH: ${{ github.ref_name }}
           RUN_NO: ${{ github.run_number }}
@@ -50,14 +49,14 @@ jobs:
         run: |
           mkdir -p build/phpcs
 
-          # Запускаем PHPCS в JSON, игнорируем код возврата (чтобы CI не падал при ошибках)
+          # Запускаем PHPCS в JSON, не падаем при ошибках
           vendor/bin/phpcs \
             --standard=phpcs.xml \
             --report=json \
             --report-file=build/phpcs/report.json \
             src tests || true
 
-          # Если JSON не создался — делаем заглушкой чистый отчёт
+          # Если JSON пустой — делаем чистый отчёт
           if [ ! -f build/phpcs/report.json ] || [ ! -s build/phpcs/report.json ]; then
             cat > build/phpcs/report.json <<'JSON'
           {
@@ -67,9 +66,9 @@ jobs:
           JSON
           fi
 
-          # Красивый HTML-отчёт
-          cat > build/phpcs/index.html <<'EOF'
-<!doctype html>
+          # Красивый HTML с Tailwind
+          cat > build/phpcs/index.html <<'HTML'
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -84,7 +83,7 @@ jobs:
 </head>
 <body class="bg-gray-50 text-gray-900 min-h-screen">
   <div class="max-w-5xl mx-auto p-8">
-    <h1 class="text-5xl font-extrabold text-center mb-10 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+    <h1 class="text-5xl font-extrabold text-center mb-12 bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
       PHP_CodeSniffer Report
     </h1>
 
@@ -97,7 +96,7 @@ jobs:
     </div>
 
     <div id="report" class="space-y-8">
-      <div class="text-center py-24"><div class="text-9xl animate-pulse">Loading...</div></div>
+      <div class="text-center py-32"><div class="text-9xl animate-pulse">Loading...</div></div>
     </div>
   </div>
 
@@ -107,60 +106,69 @@ jobs:
       .then(data => {
         const t = data.totals || { errors: 0, warnings: 0 };
         const files = data.files || {};
-        const container = document.getElementById('report');
-        container.innerHTML = '';
+        const el = document.getElementById('report');
+        el.innerHTML = '';
 
         if (t.errors === 0 && t.warnings === 0) {
-          container.innerHTML = `
+          el.innerHTML = `
             <div class="text-center py-20">
               <div class="text-9xl mb-8">Perfect!</div>
               <div class="text-6xl font-bold text-green-600 mb-6">No issues found!</div>
-              <p class="text-2xl text-gray-700">Your code is 100% PSR-12 compliant.<br>Keep rocking!</p>
+              <p class="text-2xl text-gray-700">Your code is 100% PSR-12 compliant.<br>You're a legend!</p>
             </div>`;
           return;
         }
 
         let html = `
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-            <div class="success text-white p-8 rounded-2xl text-center shadow-lg"><div class="text-5xl font-bold">${Object.keys(files).length || 0}</div><div class="text-xl">Files checked</div></div>
-            <div class="error text-white p-8 rounded-2xl text-center shadow-lg"><div class="text-5xl font-bold">${t.errors}</div><div class="text-xl">Errors</div></div>
-            <div class="warning text-white p-8 rounded-2xl text-center shadow-lg"><div class="text-5xl font-bold">${t.warnings}</div><div class="text-xl">Warnings</div></div>
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
+            <div class="success text-white p-10 rounded-2xl text-center shadow-2xl">
+              <div class="text-6xl font-bold">${Object.keys(files).length || 0}</div>
+              <div class="text-2xl">Files checked</div>
+            </div>
+            <div class="error text-white p-10 rounded-2xl text-center shadow-2xl">
+              <div class="text-6xl font-bold">${t.errors}</div>
+              <div class="text-2xl">Errors</div>
+            </div>
+            <div class="warning text-white p-10 rounded-2xl text-center shadow-2xl">
+              <div class="text-6xl font-bold">${t.warnings}</div>
+              <div class="text-2xl">Warnings</div>
+            </div>
           </div>`;
 
         Object.keys(files).forEach(file => {
           const f = files[file];
           if (f.errors === 0 && f.warnings === 0) return;
           const clean = file.replace(/^\/home\/runner\/work\/[^\/]+\/[^\/]+\//, '');
-          html += `<div class="bg-white rounded-2xl shadow-lg p-8">
-            <h3 class="font-mono text-lg font-semibold text-gray-700 mb-6">${clean}</h3>`;
+          html += `<div class="bg-white rounded-2xl shadow-xl p-8">
+            <h3 class="font-mono text-xl font-bold text-gray-800 mb-6">${clean}</h3>`;
           f.messages.forEach(m => {
-            const type = m.type === 'ERROR' ? 'bg-red-100 text-red-800 border-l-4 border-red-500' : 'bg-amber-100 text-amber-800 border-l-4 border-amber-500';
-            html += `<div class="flex items-start space-x-4 p-4 rounded-lg ${type} mb-4">
-              <div class="font-bold text-lg min-w-16">L${m.line}</div>
-              <div><div class="font-medium">${m.message}</div><div class="text-sm text-gray-600 mt-1">Source: ${m.source || 'unknown'}</div></div>
+            const type = m.type === 'ERROR' ? 'bg-red-100 text-red-800 border-l-8 border-red-500' : 'bg-amber-100 text-amber-800 border-l-8 border-amber-500';
+            html += `<div class="flex gap-6 p-5 rounded-lg ${type} mb-4">
+              <div class="font-bold text-lg w-16">L${m.line}</div>
+              <div>
+                <div class="font-medium">${m.message}</div>
+                <div class="text-sm text-gray-600 mt-1">${m.source || ''}</div>
+              </div>
             </div>`;
           });
           html += `</div>`;
         });
 
-        container.innerHTML = html;
+        el.innerHTML = html;
       })
-      .catch(err => {
-        document.getElementById('report').innerHTML = `<div class="text-center py-20 text-red-600"><h2>Error loading report</h2><pre>${err}</pre></div>`;
-      });
+      .catch(() => el.innerHTML = '<div class="text-center text-red-600 text-4xl">Failed to load report.json</div>');
   </script>
 </body>
 </html>
-EOF
+HTML
 
-      - name: Archive reports
+      - name: Upload reports artifact
         uses: actions/upload-artifact@v4
         with:
           name: reports
           path: build
 
   publish-report:
-    name: Publish reports to GitHub Pages
     needs: tests
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/')
@@ -171,58 +179,67 @@ EOF
           name: reports
           path: build
 
-      - name: Checkout gh-pages history
+      - name: Checkout gh-pages
         uses: actions/checkout@v4
         with:
           ref: gh-pages
           path: gh-pages
 
-      - name: Prepare and deploy reports
+      - name: Deploy reports to GitHub Pages
         run: |
           set -e
-          HISTORY_DIR="report-history"
-          mkdir -p "$HISTORY_DIR"
+          HISTORY="report-history"
+          mkdir -p "$HISTORY"
 
-          # Копируем старую историю, если есть
-          if [ -d "gh-pages/$HISTORY_DIR" ]; then
-            rsync -a "gh-pages/$HISTORY_DIR/" "$HISTORY_DIR/"
+          # Переносим старую историю
+          if [ -d "gh-pages/$HISTORY" ]; then
+            rsync -a "gh-pages/$HISTORY/" "$HISTORY/"
           elif [ -d gh-pages ] && [ "$(ls -A gh-pages)" ]; then
-            rsync -a --exclude '.git' gh-pages/ "$HISTORY_DIR/"
+            rsync -a --exclude '.git' gh-pages/ "$HISTORY/"
           fi
 
           BRANCH="${GITHUB_REF_NAME//[^a-zA-Z0-9-]/-}"
-          SHORT_SHA="${GITHUB_SHA:0:7}"
+          SHORT="${GITHUB_SHA:0:7}"
           RUN_ID="${GITHUB_RUN_NUMBER}"
-          RUN_DIR="$HISTORY_DIR/$BRANCH/$RUN_ID-$SHORT_SHA"
-          mkdir -p "$RUN_DIR"
+          DIR="$HISTORY/$BRANCH/$RUN_ID-$SHORT"
+          mkdir -p "$DIR"
 
-          [ -d build/coverage-html ] && rsync -a build/coverage-html/ "$RUN_DIR/coverage-html/"
-          [ -d build/phpcs ] && rsync -a build/phpcs/ "$RUN_DIR/phpcs/"
+          [ -d build/coverage-html ] && rsync -a build/coverage-html/ "$DIR/coverage-html/"
+          [ -d build/phpcs ] && rsync -a build/phpcs/ "$DIR/phpcs/"
 
-          # Страница запуска
-          cat > "$RUN_DIR/index.html" <<EOF
-<!doctype html>
-<html><head><meta charset="utf-8"><title>Run $RUN_ID / $SHORT_SHA</title>
-<style>body{font-family:system-ui,sans-serif;margin:2rem;background:#f9fafb;color:#1f2937;}
-.c{max-width:960px;margin:0 auto;}a{color:#3b82f6;text-decoration:none;font-weight:500;}</style>
-</head><body><div class="c">
-<h1>Run $RUN_ID / $SHORT_SHA</h1>
-<p>Branch: $BRANCH • Commit: $SHORT_SHA</p>
-<ul style="list-style:none;padding:0;">
-  <li style="margin:1rem 0;"><a href="coverage-html/index.html">PHPUnit Coverage Report</a></li>
-  <li style="margin:1rem 0;"><a href="phpcs/index.html">PHP_CodeSniffer Report</a></li>
-</ul>
-<p><a href="../index.html">Back to branch history</a></p>
-</div></body></html>
-EOF
+          # Страница прогона
+          cat > "$DIR/index.html" <<'PAGE'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>CI Reports</title>
+  <style>
+    body{font-family:system-ui,sans-serif;margin:3rem auto;max-width:800px;background:#f9fafb;color:#1f2937;}
+    a{color:#3b82f6;text-decoration:none;font-weight:500;}
+    ul{list-style:none;padding:0;}
+    li{margin:1rem 0;padding:1rem;background:white;border-radius:12px;box-shadow:0 4px 6px rgba(0,0,0,.05);}
+  </style>
+</head>
+<body>
+  <h1>Run ${{ github.run_number }} / ${{ github.sha_short }}</h1>
+  <p>Branch: ${{ github.ref_name }} • Commit: ${{ github.sha_short }}</p>
+  <ul>
+    <li><a href="coverage-html/index.html">PHPUnit Coverage Report</a></li>
+    <li><a href="phpcs/index.html">PHP_CodeSniffer Report</a></li>
+  </ul>
+  <p><a href="../index.html">← Back to branch history</a></p>
+</body>
+</html>
+PAGE
 
-          # Latest redirect
-          mkdir -p "$HISTORY_DIR/$BRANCH/latest"
-          cat > "$HISTORY_DIR/$BRANCH/latest/index.html" <<EOF
-<!doctype html><html><head><meta http-equiv="refresh" content="0; url=../$RUN_ID-$SHORT_SHA/index.html"></head><body>Redirecting...</body></html>
-EOF
+          # latest → текущий прогон
+          mkdir -p "$HISTORY/$BRANCH/latest"
+          cat > "$HISTORY/$BRANCH/latest/index.html" <<'LATEST'
+<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=../${{ github.run_number }}-${{ github.sha_short }}/index.html"></head><body>Redirecting...</body></html>
+LATEST
 
-      - name: Deploy to GitHub Pages
+      - name: Deploy
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
