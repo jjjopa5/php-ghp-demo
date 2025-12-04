@@ -49,7 +49,7 @@ jobs:
           BRANCH: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
           RUN_NO: ${{ github.run_number }}
-          SHORT_SHA: ${{ github.sha短::7 }}
+          SHORT_SHA: ${{ github.sha }}
         run: |
           mkdir -p build/phpcs
 
