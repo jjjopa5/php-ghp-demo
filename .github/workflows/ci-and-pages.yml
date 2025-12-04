@@ -44,48 +44,131 @@ jobs:
             --report=full \
             --report-file=build/phpcs/report.txt \
             src tests
-      - name: Prepare simple HTML wrapper for PHPCS
+            - name: Prepare beautiful PHPCS report
         env:
           BRANCH: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
           RUN_NO: ${{ github.run_number }}
+          SHORT_SHA: ${{ github.sha短::7 }}
         run: |
-          # Проверяем, пустой ли report (только summary с 0)
-          if grep -q "FOUND 0 ERRORS" build/phpcs/report.txt; then
-            echo -e "\nNo issues found! Your code is clean and compliant with the coding standard. 🎉" >> build/phpcs/report.txt
-          fi
-          cat > build/phpcs/index.html <<HTML
+          mkdir -p build/phpcs
+
+          # Запускаем PHPCS и сразу парсим результат
+          vendor/bin/phpcs \
+            --standard=phpcs.xml \
+            --report=json \
+            --report-file=build/phpcs/report.json \
+            src tests
+
+          # Генерируем красивый HTML отчёт
+          cat > build/phpcs/index.html <<'EOF'
           <!doctype html>
           <html lang="en">
           <head>
-            <meta charset="utf-8" />
+            <meta charset="utf-8">
             <title>PHP_CodeSniffer Report</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <script src="https://cdn.tailwindcss.com"></script>
             <style>
-              body { font-family: system-ui, -apple-system, sans-serif; margin: 2rem; background: #f9fafb; color: #1f2937; }
-              .container { max-width: 960px; margin: 0 auto; }
-              h1 { font-size: 1.875rem; font-weight: 600; margin-bottom: 1rem; }
-              .meta { color: #6b7280; font-size: 0.875rem; margin-bottom: 1.5rem; }
-              .content { font-family: monospace; font-size: 0.875rem; background: white; padding: 1.5rem; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); white-space: pre-wrap; }
-              .success { color: #15803d; font-weight: 500; margin-top: 1rem; }
+              .success { background: linear-gradient(90deg, #10b981, #059669); }
+              .error   { background: linear-gradient(90deg, #ef4444, #dc2626); }
+              .warning { background: linear-gradient(90deg, #f59e0b, #d97706); }
             </style>
           </head>
-          <body>
-            <div class="container">
-              <h1>PHP_CodeSniffer Report</h1>
-              <div class="meta">
-                Branch: $BRANCH<br/>
-                Commit: $COMMIT<br/>
-                Run: $RUN_NO
+          <body class="bg-gray-50 text-gray-800">
+            <div class="max-w-5xl mx-auto p-6">
+              <h1 class="text-4xl font-bold text-center mb-8 text-gray-900">
+                PHP_CodeSniffer Report
+              </h1>
+
+              <div class="bg-white rounded-2xl shadow-lg p-6 mb-8">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+                  <div>
+                    <div class="text-sm text-gray-500">Branch</div>
+                    <div class="text-xl font-semibold">${BRANCH}</div>
+                  </div>
+                  <div>
+                    <div class="text-sm text-gray-500">Commit</div>
+                    <div class="text-xl font-mono">${SHORT_SHA}</div>
+                  </div>
+                  <div>
+                    <div class="text-sm text-gray-500">Run #</div>
+                    <div class="text-xl font-semibold">${RUN_NO}</div>
+                  </div>
+                </div>
               </div>
-              <pre class="content">
-          HTML
-          cat build/phpcs/report.txt >> build/phpcs/index.html
-          cat >> build/phpcs/index.html <<HTML
-              </pre>
+
+              <div id="report" class="space-y-6">
+                <!-- Сюда влетит результат -->
+              </div>
             </div>
+
+            <script>
+              fetch('report.json')
+                .then(r => r.json())
+                .then(data => {
+                  const totals = data.totals;
+                  const files = data.files;
+                  const container = document.getElementById('report');
+
+                  if (totals.errors === 0 && totals.warnings === 0) {
+                    container.innerHTML = `
+                      <div class="text-center py-16">
+                        <div class="text-8xl mb-6">Perfect!</div>
+                        <div class="text-3xl font-bold text-green-600 mb-4">
+                          No issues found!
+                        </div>
+                        <div class="text-xl text-gray-600">
+                          Your code is perfectly compliant with PSR-12. Keep rocking!
+                        </div>
+                      </div>`;
+                    return;
+                  }
+
+                  // Если есть косяки — покажем красивую таблицу
+                  let html = `
+                    <div class="grid grid-cols-3 gap-4 text-center mb-8">
+                      <div class="success text-white p-6 rounded-xl">
+                        <div class="text-4xl font-bold">${totals.files}</div>
+                        <div class="text-lg">Files checked</div>
+                      </div>
+                      <div class="error text-white p-6 rounded-xl">
+                        <div class="text-4xl font-bold">${totals.errors}</div>
+                        <div class="text-lg">Errors</div>
+                      </div>
+                      <div class="warning text-white p-6 rounded-xl">
+                        <div class="text-4xl font-bold">${totals.warnings}</div>
+                        <div class="text-lg">Warnings</div>
+                      </div>
+                    </div>`;
+
+                  Object.keys(files).forEach(file => {
+                    const f = files[file];
+                    if (f.errors === 0 && f.warnings === 0) return;
+
+                    html += `<div class="bg-white rounded-xl shadow p-6">
+                      <div class="font-mono text-sm text-gray-600 mb-3">${file.replace(/^\/home\/runner\/work\/[^\/]+\/[^\/]+\//, '')}</div>`;
+
+                    f.messages.forEach(m => {
+                      const type = m.type === 'ERROR' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800';
+                      html += `<div class="flex items-start space-x-3 text-sm ${type} px-4 py-2 rounded-lg mb-2">
+                        <span class="font-bold">L${m.line}</span>
+                        <span>${m.message}</span>
+                      </div>`;
+                    });
+
+                    html += `</div>`;
+                  });
+
+                  container.innerHTML = html;
+                });
+            </script>
           </body>
           </html>
-          HTML
+          EOF
+
+          # Копируем JSON рядом для скрипта
+          cp build/phpcs/report.json build/phpcs/report.json
       - name: Archive reports for next job
         uses: actions/upload-artifact@v4
         with:
